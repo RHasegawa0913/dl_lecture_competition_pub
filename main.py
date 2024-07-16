@@ -11,6 +11,11 @@ import torch.nn as nn
 import torchvision
 from torchvision import transforms
 
+from tqdm import tqdm 
+
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+import numpy as np
 
 def set_seed(seed):
     random.seed(seed)
@@ -316,9 +321,11 @@ def train(model, dataloader, optimizer, criterion, device):
     total_loss = 0
     total_acc = 0
     simple_acc = 0
+    batch_count = len(dataloader)
 
     start = time.time()
-    for image, question, answers, mode_answer in dataloader:
+    #for image, question, answers, mode_answer in dataloader:
+    for batch_idx, (image, question, answers, mode_answer) in enumerate(tqdm(dataloader, desc="Training")):
         image, question, answer, mode_answer = \
             image.to(device), question.to(device), answers.to(device), mode_answer.to(device)
 
@@ -342,9 +349,11 @@ def eval(model, dataloader, optimizer, criterion, device):
     total_loss = 0
     total_acc = 0
     simple_acc = 0
+    batch_count = len(dataloader)
 
     start = time.time()
-    for image, question, answers, mode_answer in dataloader:
+    #for image, question, answers, mode_answer in dataloader:
+    for batch_idx, (image, question, answers, mode_answer) in enumerate(tqdm(dataloader, desc="Evaluating")):
         image, question, answer, mode_answer = \
             image.to(device), question.to(device), answers.to(device), mode_answer.to(device)
 
@@ -364,12 +373,16 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # dataloader / model
-    transform = transforms.Compose([
+    train_transform = transforms.Compose([
+        transforms.Resize((224, 224)), transforms.RandomHorizontalFlip(p=1.0),
+        transforms.ToTensor()
+    ])
+    test_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor()
     ])
-    train_dataset = VQADataset(df_path="./data/train.json", image_dir="./data/train", transform=transform)
-    test_dataset = VQADataset(df_path="./data/valid.json", image_dir="./data/valid", transform=transform, answer=False)
+    train_dataset = VQADataset(df_path="./data/train.json", image_dir="./data/train", transform=train_transform)
+    test_dataset = VQADataset(df_path="./data/valid.json", image_dir="./data/valid", transform=test_transform, answer=False)
     test_dataset.update_dict(train_dataset)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True)
@@ -378,7 +391,7 @@ def main():
     model = VQAModel(vocab_size=len(train_dataset.question2idx)+1, n_answer=len(train_dataset.answer2idx)).to(device)
 
     # optimizer / criterion
-    num_epoch = 1 #20
+    num_epoch = 3
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
